@@ -1,0 +1,242 @@
+{% extends "reconciliation/base.html" %}
+{% load static %}
+{% load json_script %}
+{% block content %}
+<div class="content-inner" style="max-width:1200px;margin:0 auto;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+    <h2 style="margin:0;">Upload & Mapping — {{ job.company.name }}</h2>
+    <div class="muted">Job {{ job.id }}</div>
+  </div>
+
+  <!-- PREVIEW: two previews top -->
+  <div class="preview-row">
+    <div class="preview-col">
+      <h4>Primary (A) — {{ rfA.original_name|default:rfA.file.name }}</h4>
+      <div class="table-scroll" style="margin-top:8px;">
+        {% if previewA %}
+          <table class="data-table">
+            <thead>
+              <tr>
+                {% for h in previewA.0.keys %}<th>{{ h }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in previewA %}
+                <tr>{% for v in r.values %}<td>{{ v }}</td>{% endfor %}</tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div class="muted">No preview available.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="preview-col">
+      <h4>Secondary (B) — {{ rfB.original_name|default:rfB.file.name }}</h4>
+      <div class="table-scroll" style="margin-top:8px;">
+        {% if previewB %}
+          <table class="data-table">
+            <thead>
+              <tr>
+                {% for h in previewB.0.keys %}<th>{{ h }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in previewB %}
+                <tr>{% for v in r.values %}<td>{{ v }}</td>{% endfor %}</tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <div class="muted">No preview available.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- MAPPING AREA -->
+  <div class="mapping-area">
+    <div class="map-left">
+      <h3>Primary (A) — Select fields</h3>
+
+      <form method="post">
+      {% csrf_token %}
+
+      <div class="field">
+        <label>Amount</label>
+        <select name="map_a_amount" class="select">
+          <option value="">Select column</option>
+          {% for c in colsA %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Date</label>
+        <select name="map_a_date" class="select">
+          <option value="">Select column</option>
+          {% for c in colsA %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Description</label>
+        <select name="map_a_description" class="select">
+          <option value="">Select column</option>
+          {% for c in colsA %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Reference(s)</label>
+        <div id="refsA" class="refs">
+          <div class="ref-row">
+            <select name="map_a_ref_0" class="select" style="flex:1;">
+              <option value="">Select column</option>
+              {% for c in colsA %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+            </select>
+            <button type="button" class="small-btn" onclick="addRef('A')">+</button>
+          </div>
+        </div>
+      </div>
+
+      </div> <!-- end map-left -->
+
+      <!-- right column -->
+      <div class="map-right">
+        <h3>Secondary (B) — Select fields</h3>
+
+        <div class="field">
+          <label>Amount</label>
+          <select name="map_b_amount" class="select">
+            <option value="">Select column</option>
+            {% for c in colsB %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Date</label>
+          <select name="map_b_date" class="select">
+            <option value="">Select column</option>
+            {% for c in colsB %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Description</label>
+          <select name="map_b_description" class="select">
+            <option value="">Select column</option>
+            {% for c in colsB %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Reference(s)</label>
+          <div id="refsB" class="refs">
+            <div class="ref-row">
+              <select name="map_b_ref_0" class="select" style="flex:1;">
+                <option value="">Select column</option>
+                {% for c in colsB %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+              </select>
+              <button type="button" class="small-btn" onclick="addRef('B')">+</button>
+            </div>
+          </div>
+        </div>
+
+      </div> <!-- end map-right -->
+  </div> <!-- end mapping-area -->
+
+  <!-- options & params -->
+  <div class="card" style="margin-top:18px; display:flex; flex-direction:column; gap:12px;">
+    <div style="display:flex; gap:12px; align-items:center;">
+      <div style="flex:1;">
+        <label class="muted">Keywords (comma separated)</label>
+        <input name="keywords" class="input" placeholder="e.g. short brokerage, adjustment">
+      </div>
+
+      <div style="min-width:260px; display:flex; gap:12px; align-items:center;">
+        <label style="display:flex; align-items:center; gap:10px;">
+          <input type="checkbox" name="enforce_b_unique"> <span class="muted">Enforce B uniqueness</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:10px;">
+          <input type="checkbox" name="use_references" checked> <span class="muted">Use references</span>
+        </label>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:14px; align-items:center;">
+      <div style="width:160px;">
+        <label class="muted">Amount tolerance (%)</label>
+        <input name="amount_tolerance" class="input" value="1">
+      </div>
+      <div style="width:160px;">
+        <label class="muted">Date window (days)</label>
+        <input name="date_window" class="input" value="7">
+      </div>
+      <div style="width:140px;">
+        <label class="muted">Fuzzy %</label>
+        <input name="fuzzy_pct" class="input" value="80">
+      </div>
+
+      <div style="margin-left:auto;">
+        <button type="submit" class="btn-primary">Start Processing →</button>
+        <a href="{% url 'reconciliation:upload_preview' job_id=job.id %}" class="btn-secondary" style="margin-left:8px;">Back</a>
+      </div>
+    </div>
+  </div>
+
+  </form>
+
+  {# insert safe json data for JS to use #}
+  {{ colsA|json_script:"colsA_data" }}
+  {{ colsB|json_script:"colsB_data" }}
+  {{ suggestions|json_script:"suggestions_data" }}
+
+</div>
+
+<script>
+  const colsA = JSON.parse(document.getElementById("colsA_data").textContent || "[]");
+  const colsB = JSON.parse(document.getElementById("colsB_data").textContent || "[]");
+  const suggestions = JSON.parse(document.getElementById("suggestions_data").textContent || "{}");
+
+  let idxA = 1, idxB = 1;
+  function addRef(side){
+    const container = document.getElementById(side === 'A' ? 'refsA' : 'refsB');
+    const cols = side === 'A' ? colsA : colsB;
+    const idx = side === 'A' ? idxA++ : idxB++;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'ref-row';
+    wrapper.style.display = 'flex'; wrapper.style.gap = '10px'; wrapper.style.marginBottom = '8px';
+    const sel = document.createElement('select');
+    sel.name = 'map_' + side.toLowerCase() + '_ref_' + idx;
+    sel.className = 'select';
+    sel.style.flex = '1';
+    const opt0 = document.createElement('option'); opt0.value=''; opt0.text='Select column'; sel.appendChild(opt0);
+    for (let c of cols){ const o = document.createElement('option'); o.value=c; o.text=c; sel.appendChild(o); }
+    const rem = document.createElement('button');
+    rem.type='button'; rem.className='small-btn'; rem.textContent='Remove';
+    rem.onclick = ()=> container.removeChild(wrapper);
+    wrapper.appendChild(sel); wrapper.appendChild(rem); container.appendChild(wrapper);
+  }
+
+  // optional: set some smart defaults using suggestions (keeps user in control)
+  (function autofillSuggested(){
+    try{
+      // fill first A reference with the most "suggested" candidate if any
+      const p = Object.entries(suggestions || {});
+      if (p.length && document.querySelector('#refsA select')){
+        // find first mapping that has suggestion
+        for (const [a,b] of p){
+          if (b && colsA.includes(a)){
+            const firstSel = document.querySelector('#refsA select');
+            // don't overwrite if user preselected; only set if empty
+            if (firstSel && !firstSel.value) firstSel.value = a;
+            break;
+          }
+        }
+      }
+    }catch(e){ console.warn(e); }
+  })();
+</script>
+{% endblock %}

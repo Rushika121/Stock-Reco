@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{% block title %}Reconciliation Portal{% endblock %}</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'reconciliation/css/base.css' %}">
+  {% block page_css %}{% endblock %}
+</head>
+
+<body>
+  <header class="rp-header" role="banner">
+    <div class="rp-header-left">
+      <img src="{% static 'reconciliation/logo.png' %}" alt="logo" class="rp-logo">
+    </div>
+
+    <div style="margin:0 auto; text-align:center;">
+      <div class="rp-title">Reconciliation Portal</div>
+    </div>
+
+    <div class="rp-header-right">
+      {% if request.user.is_authenticated %}
+        <div class="rp-username">{{ request.user.get_full_name|default:request.user.username }}</div>
+        <div class="rp-avatar">{{ request.user.username|first|upper }}</div>
+      {% else %}
+        <a href="{% url 'reconciliation:login' %}" class="rp-link">Login</a>
+        <a href="{% url 'reconciliation:signup' %}" class="rp-link">Sign up</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="rp-layout">
+    {% if request.user.is_authenticated %}
+    <aside class="rp-sidebar">
+      <div class="rp-nav-title">Navigation</div>
+      <a class="rp-navlink" href="{% url 'reconciliation:dashboard' %}">Dashboard</a>
+      <a class="rp-navlink" href="{% url 'reconciliation:company_select' %}">Upload & Mapping</a>
+
+      <form action="{% url 'reconciliation:logout' %}" method="post" style="margin-top:10px;">
+        {% csrf_token %}
+        <button class="rp-navlink rp-logout-btn" type="submit">Logout</button>
+      </form>
+    </aside>
+    {% endif %}
+
+    <main class="rp-main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {% block page_js %}{% endblock %}
+</body>
+</html>

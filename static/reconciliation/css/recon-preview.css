@@ -1,0 +1,46 @@
+/* Add/update these rules in static/reconciliation/css/recon-preview.css */
+
+/* make cards full width and stacked (File A above File B) */
+.preview-row { display:block; gap:0; }
+.preview-col { flex-basis:100%; min-width:auto; }
+
+/* optional helper class used in template for full width */
+.fullwidth-card { width:100%; margin-bottom:18px; }
+
+/* keep scroll area sizing (horizontal + vertical within the card) */
+.preview-scroll-area {
+  max-height: 360px;
+  overflow: auto;
+  padding: 12px 18px;
+  box-sizing: border-box;
+  background: linear-gradient(#ffffff, #ffffff);
+}
+
+/* actions area: right aligned proceed button */
+.preview-actions {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-top:16px;
+}
+
+/* proceed button styling (blue gradient, rounded) */
+.proceed-btn {
+  background: linear-gradient(90deg,#1e63d8,#0b58c7);
+  color:#fff;
+  padding:10px 18px;
+  border-radius:10px;
+  text-decoration:none;
+  border:0;
+  font-weight:700;
+  box-shadow: 0 10px 28px rgba(11,88,199,0.12);
+}
+.proceed-btn:hover { transform: translateY(-2px); opacity:0.98; }
+
+/* small screens: keep stacked and responsive */
+@media (max-width:900px) {
+  .preview-card { margin: 0 8px; }
+  .preview-actions { flex-direction:column; align-items:stretch; gap:8px; }
+  .proceed-btn { width:100%; text-align:center; }
+}

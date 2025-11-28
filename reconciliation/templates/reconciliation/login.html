@@ -1,0 +1,212 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Reconciliation Portal — Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Base CSS -->
+  <link rel="stylesheet" href="{% static 'reconciliation/css/base.css' %}">
+
+  <style>
+    /* FULL BACKGROUND IMAGE */
+    body.login-page {
+      margin:0;
+      min-height:100vh;
+      overflow:hidden;                 /* NO SCROLLBAR */
+      background-image: url("{% static 'reconciliation/recon_background.png' %}");
+      background-size: cover;
+      background-position:center;
+      background-repeat:no-repeat;
+      font-family: Inter, sans-serif;
+    }
+
+    /* HEADER (logo left + links right) */
+    .login-header {
+      height: 86px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 14px 40px;
+      background: rgba(255,255,255,0.92);
+      border-bottom:1px solid rgba(0,0,0,0.09);
+    }
+    .login-header img { height:58px; }
+
+    .auth-links a {
+      color: var(--primary);
+      font-weight:700;
+      font-size:16px;
+      margin-left:18px;
+      text-decoration:none;
+    }
+
+    /* OVERLAY so login box readable */
+    .login-overlay {
+      position:fixed;
+      left:0; right:0; top:86px; bottom:0;
+      background: rgba(246,248,251,0.82);
+    }
+
+    /* CENTER LOGIN CARD PERFECTLY */
+    .login-wrapper {
+      position:relative;
+      z-index:10;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height: calc(100vh - 86px);
+      padding: 40px 20px;
+    }
+
+    /* LOGIN BOX */
+    .login-card {
+      width:100%;
+      max-width:480px;
+      background:white;
+      border-radius:14px;
+      padding:40px 34px;
+      box-shadow: 0 18px 40px rgba(15,23,42,0.10);
+      border:1px solid rgba(0,0,0,0.06);
+      text-align:left;
+    }
+
+    .login-card h1 {
+      font-size:28px;
+      font-weight:800;
+      margin-bottom:8px;
+      text-align:center;
+    }
+    .subtitle {
+      color:var(--muted);
+      font-size:15px;
+      text-align:center;
+      margin-bottom:26px;
+    }
+
+    /* FORM */
+    .form-row { margin-bottom:18px; }
+    .form-row label { font-weight:700; margin-bottom:6px; display:block; }
+    .form-row input {
+      width:100%;
+      padding:12px 14px;
+      border-radius:10px;
+      border:1px solid #d4d7df;
+      font-size:15px;
+      background:#fff;
+    }
+
+    /* FOOTER ROW (show password + forgot) */
+    .row-between {
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      margin-bottom:16px;
+    }
+    .row-between .left {
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:var(--muted);
+      font-weight:600;
+    }
+    .row-between .left input { width:18px; height:18px; }
+
+    /* LOGIN BUTTON */
+    .btn-login {
+      width:100%;
+      padding:14px 18px;
+      background: linear-gradient(90deg,#4f46e5,#6f45ff);
+      color:white;
+      font-weight:800;
+      border:none;
+      border-radius:10px;
+      cursor:pointer;
+      margin-top:4px;
+      box-shadow:0 14px 26px rgba(79,70,229,0.18);
+      font-size:16px;
+    }
+
+    .link-create-account {
+      text-align:center;
+      display:block;
+      margin-top:16px;
+      color:var(--primary);
+      text-decoration:none;
+      font-weight:700;
+    }
+
+    @media(max-width:700px){
+      body.login-page { overflow:auto; }
+      .login-card { padding:26px 20px; }
+    }
+  </style>
+</head>
+
+<body class="login-page">
+
+  <!-- HEADER -->
+  <header class="login-header">
+    <img src="{% static 'reconciliation/logo.png' %}" alt="Logo">
+    <div class="auth-links">
+      <a href="{% url 'reconciliation:login' %}">Login</a>
+      <a href="{% url 'reconciliation:signup' %}">Sign up</a>
+    </div>
+  </header>
+
+  <!-- BACKGROUND OVERLAY -->
+  <div class="login-overlay"></div>
+
+  <!-- CENTERED LOGIN CARD -->
+  <div class="login-wrapper">
+    <div class="login-card">
+
+      <h1>Reconciliation Portal Login</h1>
+      <p class="subtitle">Please sign in to continue</p>
+
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="form-row">
+          <label for="id_username">Username / Email</label>
+          <input type="text" id="id_username" name="username" required placeholder="Enter your username">
+        </div>
+
+        <div class="form-row">
+          <label for="id_password">Password</label>
+          <input type="password" id="id_password" name="password" required placeholder="Enter your password">
+        </div>
+
+        <div class="row-between">
+          <div class="left">
+            <input type="checkbox" onclick="togglePass()">
+            <span>Show Password</span>
+          </div>
+          <a href="{% url 'reconciliation:password_reset' %}" style="color:var(--primary); font-weight:700;">
+            Forgot password?
+          </a>
+        </div>
+
+        <button type="submit" class="btn-login">Login</button>
+
+        <a class="link-create-account" href="{% url 'reconciliation:signup' %}">
+          Create account
+        </a>
+
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function togglePass(){
+      let p = document.getElementById("id_password");
+      p.type = p.type === "password" ? "text" : "password";
+    }
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,90 @@
+/* dashboard.css — styling for dashboard page */
+
+/* container */
+.dashboard-container{
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* header */
+.page-header{
+  margin-bottom: 20px;
+}
+.page-title{
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+/* KPI row */
+.kpi-row{
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap:18px;
+  margin-bottom: 28px;
+}
+
+/* KPI card base */
+.kpi-card{
+  border-radius: 10px;
+  padding: 18px;
+  color: #fff;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  min-height:92px;
+}
+.kpi-label{font-size:13px;opacity:.9}
+.kpi-value{font-size:22px;font-weight:700;margin-top:6px}
+.kpi-sub{font-size:12px;opacity:.9;margin-top:6px}
+
+/* colors */
+.kpi-blue{background:#006df2}
+.kpi-orange{background:#f29f05}
+.kpi-green{background:#2cc97f}
+.kpi-purple{background:#7a57d1}
+
+/* section */
+.section{margin-top:14px}
+.section-title{font-size:18px;font-weight:600;margin-bottom:12px}
+
+/* table card */
+.table-card{
+  background:#fff;
+  padding:18px;
+  border-radius:10px;
+  border:1px solid #eef2f6;
+  box-shadow: 0 6px 18px rgba(20,30,40,0.03);
+}
+
+/* tables */
+.styled-table{
+  width:100%;
+  border-collapse:collapse;
+}
+.styled-table th{
+  text-align:left;
+  padding:10px;
+  font-size:13px;
+  color:#4b5563;
+  border-bottom:1px solid #e9eef4;
+}
+.styled-table td{
+  padding:10px;
+  font-size:14px;
+  vertical-align:middle;
+}
+.green-text{color:#1fa05e;font-weight:600}
+.red-text{color:#d94545;font-weight:600}
+.muted{color:#7d8590;text-align:center;padding:16px}
+
+/* responsive */
+@media (max-width: 900px){
+  .kpi-row{grid-template-columns: repeat(2,1fr)}
+  .table-card{padding:12px}
+}
+@media (max-width: 520px){
+  .kpi-row{grid-template-columns: 1fr}
+  .dashboard-container{padding:0 12px}
+}

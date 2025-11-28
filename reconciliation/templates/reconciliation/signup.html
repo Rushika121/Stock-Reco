@@ -1,0 +1,23 @@
+{% extends "reconciliation/base.html" %}
+{% block content %}
+<div class="login-wrapper">
+  <div class="login-card">
+    <h1 class="h1">Create account</h1>
+    <div class="login-sub">Sign up to access the reconciliation portal</div>
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="form-row">
+          {{ field.label_tag }}
+          {{ field }}
+          {% if field.errors %}<div style="color:#c00">{{ field.errors }}</div>{% endif %}
+        </div>
+      {% endfor %}
+      <div class="form-row">
+        <button class="btn btn-primary" type="submit">Create account</button>
+      </div>
+    </form>
+    <p style="margin-top:8px;"><a href="{% url 'reconciliation:login' %}">Back to login</a></p>
+  </div>
+</div>
+{% endblock %}

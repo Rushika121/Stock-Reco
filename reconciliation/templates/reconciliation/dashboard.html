@@ -1,0 +1,79 @@
+{% extends "reconciliation/base.html" %}
+{% load static %}
+
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'reconciliation/css/dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+
+  <div class="page-header">
+    <h1 class="page-title">Dashboard</h1>
+  </div>
+
+  <!-- KPI CARDS -->
+  <div class="kpi-row">
+    <div class="kpi-card kpi-blue">
+      <div class="kpi-label">Reconciled value</div>
+      <div class="kpi-value">₹ {{ total_reconciled|floatformat:0 }}</div>
+      <div class="kpi-sub">Updated automatically</div>
+    </div>
+
+    <div class="kpi-card kpi-orange">
+      <div class="kpi-label">Unmatched value</div>
+      <div class="kpi-value">₹ {{ total_unmatched|floatformat:0 }}</div>
+      <div class="kpi-sub">Latest from all banks</div>
+    </div>
+
+    <div class="kpi-card kpi-green">
+      <div class="kpi-label">Pending uploads</div>
+      <div class="kpi-value">{{ pending_uploads }}</div>
+      <div class="kpi-sub">Companies pending</div>
+    </div>
+
+    <div class="kpi-card kpi-purple">
+      <div class="kpi-label">Last updated</div>
+      <div class="kpi-value">{{ last_updated }}</div>
+      <div class="kpi-sub">Across all banks</div>
+    </div>
+  </div>
+
+  <!-- Insurer Table -->
+  <div class="section">
+    <div class="section-title">Insurer wise reconciliation</div>
+
+    <div class="table-card">
+      <table class="styled-table">
+        <thead>
+          <tr>
+            <th>Insurer</th>
+            <th>Clearing</th>
+            <th>SAIBA</th>
+            <th>Reconciled</th>
+            <th>Unmatched</th>
+            <th>Last updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in insurer_data %}
+            <tr>
+              <td>{{ row.company }}</td>
+              <td>₹ {{ row.clearing|floatformat:0 }}</td>
+              <td>₹ {{ row.saiba|floatformat:0 }}</td>
+              <td class="green-text">₹ {{ row.reconciled|floatformat:0 }}</td>
+              <td class="red-text">₹ {{ row.unmatched|floatformat:0 }}</td>
+              <td>{{ row.updated }}</td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="6" class="muted">No reconciliation jobs found yet.</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

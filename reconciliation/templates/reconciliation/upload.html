@@ -1,0 +1,133 @@
+{% extends "reconciliation/base.html" %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'reconciliation/css/upload.css' %}">
+
+<div style="max-width:1200px;margin:0 auto;">
+  <h2 style="margin:18px 0;">Upload Statement for {{company.name}}</h2>
+
+  <form method="post" enctype="multipart/form-data" id="uploadForm">
+    {% csrf_token %}
+
+    <div class="upload-grid">
+      <div class="upload-card" id="dropA">
+        <div class="upload-header">Dataset A (Primary)</div>
+        <div class="drop-area" data-side="A">
+          <div class="drop-icon">📁</div>
+          <div class="drop-title">Drop file here or</div>
+          <button type="button" class="btn-choose" data-target="file_a_btn">Choose file</button>
+          <input type="file" name="file_a" id="file_a_btn" accept=".csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+          <div class="file-info" id="fileAInfo"></div>
+          <div class="muted small">Supported: Excel (.xlsx, .xls) or CSV. Max 50MB</div>
+        </div>
+      </div>
+
+      <div class="upload-card" id="dropB">
+        <div class="upload-header">Dataset B (Secondary)</div>
+        <div class="drop-area" data-side="B">
+          <div class="drop-icon">📁</div>
+          <div class="drop-title">Drop file here or</div>
+          <button type="button" class="btn-choose" data-target="file_b_btn">Choose file</button>
+          <input type="file" name="file_b" id="file_b_btn" accept=".csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
+          <div class="file-info" id="fileBInfo"></div>
+          <div class="muted small">Supported: Excel (.xlsx, .xls) or CSV. Max 50MB</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:12px; margin-top:14px;">
+      <button type="button" id="autoDetect" class="btn-secondary">Auto-detect headers</button>
+      <div style="flex:1"></div>
+      <input type="hidden" name="auto_detect_headers" id="auto_detect_headers" value="0">
+      <button type="submit" id="continueBtn" class="btn-primary" disabled>Continue → Detect</button>
+    </div>
+  </form>
+</div>
+
+<script>
+/* Upload UI script:
+   - drag & drop
+   - choose file button
+   - shows selected file name
+   - enables continue when at least one file is present
+*/
+(function(){
+  function $(sel){ return document.querySelector(sel); }
+  function $all(sel){ return Array.from(document.querySelectorAll(sel)); }
+
+  const fileA = document.getElementById('file_a_btn');
+  const fileB = document.getElementById('file_b_btn');
+  const fileAInfo = document.getElementById('fileAInfo');
+  const fileBInfo = document.getElementById('fileBInfo');
+  const continueBtn = document.getElementById('continueBtn');
+  const autoDetect = document.getElementById('autoDetect');
+  const autoDetectField = document.getElementById('auto_detect_headers');
+
+  function showFileInfo(input, infoEl){
+    if (!input.files || input.files.length === 0){
+      infoEl.textContent = '';
+      return;
+    }
+    const f = input.files[0];
+    infoEl.innerHTML = `<strong>${escapeHtml(f.name)}</strong> <span class="muted small"> — ${formatBytes(f.size)}</span>`;
+    checkEnable();
+  }
+
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024, sizes = ['B','KB','MB','GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k,i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  function escapeHtml(s){ return (''+s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function checkEnable(){
+    const ok = (fileA.files && fileA.files.length>0) || (fileB.files && fileB.files.length>0);
+    continueBtn.disabled = !ok;
+  }
+
+  // choose buttons
+  document.querySelectorAll('.btn-choose').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      document.getElementById(btn.getAttribute('data-target')).click();
+    });
+  });
+
+  fileA.addEventListener('change', ()=> showFileInfo(fileA, fileAInfo));
+  fileB.addEventListener('change', ()=> showFileInfo(fileB, fileBInfo));
+
+  // drag & drop for both areas
+  $all('.drop-area').forEach(area=>{
+    area.addEventListener('dragenter', e=> { e.preventDefault(); area.classList.add('drop-hover'); });
+    area.addEventListener('dragover', e=> { e.preventDefault(); area.classList.add('drop-hover'); });
+    area.addEventListener('dragleave', e=> { e.preventDefault(); area.classList.remove('drop-hover'); });
+    area.addEventListener('drop', e=>{
+      e.preventDefault(); area.classList.remove('drop-hover');
+      const files = e.dataTransfer.files;
+      if (!files || files.length === 0) return;
+      const side = area.getAttribute('data-side');
+      if (side === 'A'){
+        fileA.files = files;
+        showFileInfo(fileA, fileAInfo);
+      } else {
+        fileB.files = files;
+        showFileInfo(fileB, fileBInfo);
+      }
+    });
+  });
+
+  // auto-detect toggle
+  autoDetect.addEventListener('click', function(){
+    const on = autoDetectField.value === '0';
+    autoDetectField.value = on ? '1' : '0';
+    autoDetect.textContent = on ? 'Auto-detect headers ✓' : 'Auto-detect headers';
+    autoDetect.classList.toggle('btn-active', on);
+  });
+
+  // initial check
+  checkEnable();
+})();
+</script>
+
+{% endblock %}

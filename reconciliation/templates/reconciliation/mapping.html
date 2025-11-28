@@ -1,0 +1,55 @@
+{% extends "reconciliation/base.html" %}
+{% load static %}
+
+{% block page_css %}
+<link rel="stylesheet" href="{% static 'reconciliation/css/upload.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="mapping-wrapper">
+  <h2>Column Mapping — Job {{ job.id }}</h2>
+
+  {% for p in previews %}
+    <div class="preview-card">
+      <div class="preview-title">{{ p.filename }}</div>
+
+      {% if p.error %}
+        <div class="preview-error">Preview failed: {{ p.error }}</div>
+      {% else %}
+        <div class="preview-columns">
+          <form method="post">
+            {% csrf_token %}
+            <table class="preview-table">
+              <thead>
+                <tr>
+                  <th>Column</th>
+                  <th>Map to</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for col in p.columns %}
+                  <tr>
+                    <td class="col-name">{{ col }}</td>
+                    <td>
+                      <select name="map__{{ col|escape }}" class="map-select">
+                        <option value="">-- select field --</option>
+                        {% for sf in standardized_fields %}
+                          <option value="{{ sf }}">{{ sf }}</option>
+                        {% endfor %}
+                      </select>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+
+            <div style="margin-top:12px;">
+              <button type="submit" class="btn-primary">Save mapping & continue</button>
+            </div>
+          </form>
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

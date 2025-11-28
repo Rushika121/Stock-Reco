@@ -1,0 +1,39 @@
+{% extends "reconciliation/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+
+    <h1 class="page-h1">Select Reconciliation Module</h1>
+
+    <div class="select-card card">
+
+        <div class="select-row">
+
+            <!-- Label -->
+            <label class="field-label">Modules</label>
+
+            <!-- Dropdown -->
+            <form method="POST" style="width:100%;">
+                {% csrf_token %}
+
+                <select name="module" class="select-input" required>
+                    <option value="">Select Module — Example.Hdfc</option>
+
+                    {% for val, label in modules %}
+                        <option value="{{ val }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+
+                <!-- Proceed Button -->
+                <button type="submit" class="proceed-btn" style="margin-top:18px;">
+                    Proceed
+                </button>
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+{% endblock %}

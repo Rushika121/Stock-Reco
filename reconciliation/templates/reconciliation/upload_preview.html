@@ -1,0 +1,60 @@
+{# reconciliation/templates/reconciliation/upload_preview.html #}
+{% extends "reconciliation/base.html" %}
+{% load static %}
+
+{% block content %}
+<link rel="stylesheet" href="{% static 'reconciliation/css/recon-preview.css' %}">
+
+<div class="container" style="padding-top:28px;">
+  <h2 class="page-h1">Uploaded File Preview</h2>
+
+  <!-- FILE A -->
+  <div class="preview-card fullwidth-card" aria-label="File A preview">
+    <div class="card-header">
+      {% if rfA and rfA.original_name %}File A — {{ rfA.original_name }}{% else %}File A{% endif %}
+    </div>
+    <div class="preview-scroll-area">
+      {% if preview_a %}
+        {{ preview_a|safe }}
+      {% else %}
+        <div class="p-4 text-muted">No preview available for File A.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- small gap -->
+  <div style="height:20px"></div>
+
+  <!-- FILE B -->
+  <div class="preview-card fullwidth-card" aria-label="File B preview">
+    <div class="card-header">
+      {% if rfB and rfB.original_name %}File B — {{ rfB.original_name }}{% else %}File B{% endif %}
+    </div>
+    <div class="preview-scroll-area">
+      {% if preview_b %}
+        {{ preview_b|safe }}
+      {% else %}
+        <div class="p-4 text-muted">No preview available for File B.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- actions -->
+  <div class="preview-actions">
+    <a class="btn btn-outline-secondary" href="{% url 'reconciliation:upload_files' company_id=job.company.id %}">Back</a>
+
+    {# if mapping view route is mapping_advanced, adjust if yours differs #}
+    <a class="btn proceed-btn" href="{% url 'reconciliation:mapping_advanced' job_id=job.id %}">Proceed to Mapping</a>
+  </div>
+</div>
+
+<!-- initialize bootstrap tooltips if used by preview HTML -->
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    if (typeof bootstrap !== 'undefined') {
+      var list = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      list.forEach(function (el) { new bootstrap.Tooltip(el); });
+    }
+  });
+</script>
+{% endblock %}
