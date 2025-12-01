@@ -1,613 +1,383 @@
 # reconciliation/views.py
 """
-Updated views.py — improved upload/preview robustness and consistent template context.
-Replace your current reconciliation/views.py with this file (keep your models/forms unchanged).
+Complete fixed views with proper table formatting and dynamic headers
 """
 
-import difflib
-import pandas as pd
-import re
-from dateutil import parser as dateparser
-from urllib.parse import unquote_plus
+import json
 import logging
+import pandas as pd
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import login
-from django.urls import reverse
-from pathlib import Path
 from .models import Company, ReconciliationJob, ReconciliationFile
 from .forms import SignUpForm
-import os
 
-# -------------------------
-# Helpers: file read + normalization
-# -------------------------
 logger = logging.getLogger(__name__)
 
-def _read_file_to_df(filefield):
-    """Read a full file into a DataFrame (excel or csv)."""
-    try:
-        filefield.seek(0)
-    except Exception:
-        pass
-    try:
-        df = pd.read_excel(filefield, engine="openpyxl", dtype=object)
-    except Exception:
-        filefield.seek(0)
-        df = pd.read_csv(filefield, dtype=object, engine="python")
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
-
-def _clean_numeric(x):
-    if x is None:
-        return None
-    if isinstance(x, (int, float)):
-        return x
-    s = str(x).strip()
-    # keep digits, dots and minus
-    s = re.sub(r'[^\d\.\-]', '', s)
-    if s in ('', '.', '-'):
-        return None
-    try:
-        if '.' in s:
-            return float(s)
-        return int(s)
-    except:
-        try:
-            return float(s)
-        except:
-            return None
-
-def _clean_text(x):
-    if x is None:
-        return ''
-    return str(x).strip()
-
-def _parse_date(x):
-    if x is None or x == '':
-        return None
-    try:
-        return dateparser.parse(str(x))
-    except:
-        return None
-
-def apply_mapping_to_df(df, mapping):
-    """Given a df and mapping dict orig_col -> std_name, rename & normalize."""
-    rename_map = {}
-    for orig, std in mapping.items():
-        if not std:
-            continue
-        matches = [c for c in df.columns if c.strip().lower() == orig.strip().lower()]
-        if matches:
-            rename_map[matches[0]] = std
-    df = df.rename(columns=rename_map)
-    if "Gross Premium" in df.columns:
-        df["Gross Premium"] = df["Gross Premium"].apply(_clean_numeric)
-    if "Brokerage Amount" in df.columns:
-        df["Brokerage Amount"] = df["Brokerage Amount"].apply(_clean_numeric)
-    if "Policy Number" in df.columns:
-        df["Policy Number"] = df["Policy Number"].apply(_clean_text)
-    if "Policy Start Date" in df.columns:
-        df["Policy Start Date"] = df["Policy Start Date"].apply(_parse_date)
-    return df
-
-def auto_map_columns(colsA, colsB):
-    mapped = {}
-    lowerB = {c.lower(): c for c in colsB}
-    for a in colsA:
-        a_low = a.strip().lower()
-        candidates = [b for b in colsB if a_low in b.lower() or b.lower() in a_low]
-        if candidates:
-            mapped[a] = candidates[0]; continue
-        close = difflib.get_close_matches(a_low, [b.lower() for b in colsB], n=1, cutoff=0.6)
-        if close:
-            mapped[a] = lowerB[close[0]]; continue
-        mapped[a] = ""
-    return mapped
+ALLOWED_EXT = ["csv", "xls", "xlsx", "xlsb"]
 
 # -------------------------
-# Simple bank reconcile stubs + dispatcher
+# Helper Functions
 # -------------------------
-def reconcile_oriental(dfA, dfB, params=None):
-    key = "Policy Number"
-    prem = "Gross Premium"
-    results = {"matches":0, "mismatches":0, "missing_in_A":0, "missing_in_B":0, "diffs":[]}
-    a_keys = set(dfA[key].astype(str)) if key in dfA.columns else set()
-    b_keys = set(dfB[key].astype(str)) if key in dfB.columns else set()
-    keys = sorted(a_keys | b_keys)
-    tol_pct = 0.01
-    if params:
-        tol_pct = float(params.get("amount_tolerance", 1.0))/100.0
-    for k in keys:
-        rowa = dfA[dfA.get(key, "") == k] if key in dfA.columns else None
-        rowb = dfB[dfB.get(key, "") == k] if key in dfB.columns else None
-        if (rowa is None or rowa.empty) and (rowb is not None and not rowb.empty):
-            results["missing_in_A"] += 1; continue
-        if (rowb is None or rowb.empty) and (rowa is not None and not rowa.empty):
-            results["missing_in_B"] += 1; continue
-        pa = None; pb = None
+
+def _get_ext(name):
+    """Extract file extension"""
+    return name.rsplit(".", 1)[-1].lower() if "." in name else ""
+
+
+def _read_file_to_df(file_obj, max_rows=None):
+    """
+    Read uploaded file to DataFrame with proper header detection
+    Args:
+        file_obj: Django UploadedFile or FileField
+        max_rows: limit rows (None = all rows)
+    Returns:
+        DataFrame or None on error
+    """
+    try:
+        # Reset file pointer
         try:
-            pa = _clean_numeric(rowa.iloc[0].get(prem)) if (rowa is not None and not rowa.empty and prem in rowa.columns) else None
-            pb = _clean_numeric(rowb.iloc[0].get(prem)) if (rowb is not None and not rowb.empty and prem in rowb.columns) else None
+            file_obj.seek(0)
         except:
             pass
-        if pa is None and pb is None:
-            continue
-        if pa is not None and pb is not None:
-            if pa == pb or (abs(pa - pb) <= max(1e-9, abs(pa) * tol_pct)):
-                results["matches"] += 1
-            else:
-                results["mismatches"] += 1
-                results["diffs"].append({"policy": k, "a": pa, "b": pb})
+        
+        # Get filename
+        filename = getattr(file_obj, 'name', '')
+        ext = _get_ext(filename)
+        
+        # Read based on extension
+        if ext in ('xls', 'xlsx', 'xlsb'):
+            df = pd.read_excel(file_obj, engine="openpyxl", nrows=max_rows)
         else:
-            results["mismatches"] += 1
-            results["diffs"].append({"policy": k, "a": pa, "b": pb})
-    return results
+            df = pd.read_csv(file_obj, nrows=max_rows, engine="python")
+        
+        # Clean column names - strip whitespace
+        df.columns = [str(c).strip() for c in df.columns]
+        
+        # Fill NaN with empty string for display
+        df = df.fillna("")
+        
+        # Convert all data to string for consistent display
+        for col in df.columns:
+            df[col] = df[col].astype(str)
+        
+        return df
+        
+    except Exception as e:
+        logger.exception(f"Error reading file: {e}")
+        return None
 
-def reconcile_generic(dfA, dfB, params=None):
-    return reconcile_oriental(dfA, dfB, params=params)
 
-def run_reconcile_by_bank(job, dfA, dfB, params=None):
-    bank = job.company.bank_identifier if job and job.company else "GENERIC"
-    if bank.upper() == "ORIENTAL":
-        return reconcile_oriental(dfA, dfB, params=params)
-    if bank.upper() == "MAGMA":
-        return reconcile_generic(dfA, dfB, params=params)
-    if bank.upper() == "RSA":
-        return reconcile_generic(dfA, dfB, params=params)
-    if bank.upper() == "ICICI":
-        return reconcile_generic(dfA, dfB, params=params)
-    return reconcile_generic(dfA, dfB, params=params)
+def _df_to_preview_html(df, max_rows=5):
+    """
+    Convert DataFrame to HTML preview table with proper formatting
+    Returns clean HTML with horizontal scroll support
+    """
+    if df is None or df.empty:
+        return '<div style="padding:20px;text-align:center;color:#999;">No data available</div>'
+    
+    # Limit rows
+    df_preview = df.head(max_rows)
+    
+    # Build HTML manually for better control
+    html_parts = []
+    
+    # Start table
+    html_parts.append('<table class="preview-table">')
+    
+    # Table header
+    html_parts.append('<thead><tr>')
+    for col in df_preview.columns:
+        # Escape HTML and truncate long column names
+        col_display = str(col)[:50]
+        html_parts.append(f'<th class="preview-th">{col_display}</th>')
+    html_parts.append('</tr></thead>')
+    
+    # Table body
+    html_parts.append('<tbody>')
+    for idx, row in df_preview.iterrows():
+        html_parts.append('<tr>')
+        for col in df_preview.columns:
+            val = str(row[col]) if row[col] else ''
+            # Truncate very long values
+            if len(val) > 100:
+                val = val[:100] + '...'
+            html_parts.append(f'<td class="preview-td">{val}</td>')
+        html_parts.append('</tr>')
+    html_parts.append('</tbody>')
+    
+    html_parts.append('</table>')
+    
+    return ''.join(html_parts)
+
 
 # -------------------------
 # Views
 # -------------------------
+
 @login_required
 def dashboard(request):
+    """Dashboard view"""
     companies = Company.objects.all()
     insurer_data = []
     total_reconciled = 0
     total_unmatched = 0
-    total_pending_uploads = 0
+    pending_uploads = 0
     last_updated = None
 
     for company in companies:
-        latest_job = (ReconciliationJob.objects.filter(company=company).order_by('-created_at').first())
+        latest_job = (ReconciliationJob.objects
+                      .filter(company=company)
+                      .order_by('-created_at')
+                      .first())
+        
         if latest_job:
             summary = latest_job.summary or {}
-            clearing = summary.get("clearing_total", 0)
-            saiba = summary.get("saiba_total", 0)
-            reconciled = summary.get("reconciled_value", 0)
-            unmatched = summary.get("unmatched_value", 0)
+            stats = summary.get("stats", {})
+            
+            reconciled = stats.get("matched_count", 0)
+            unmatched = stats.get("unmatched_total", 0)
             updated = latest_job.finished_at or latest_job.created_at
-            insurer_data.append({
-                "company": company.name,
-                "clearing": clearing,
-                "saiba": saiba,
-                "reconciled": reconciled,
-                "unmatched": unmatched,
-                "updated": updated.strftime("%b %d, %Y") if updated else "N/A"
-            })
-            total_reconciled += reconciled or 0
-            total_unmatched += unmatched or 0
-            if latest_job.status == "PENDING":
-                total_pending_uploads += 1
-            if not last_updated or (updated and updated > last_updated):
-                last_updated = updated
-        else:
+            
             insurer_data.append({
                 "company": company.name,
                 "clearing": 0,
                 "saiba": 0,
-                "reconciled": 0,
-                "unmatched": 0,
-                "updated": "Not started"
+                "reconciled": reconciled,
+                "unmatched": unmatched,
+                "updated": updated.strftime("%b %d, %Y") if updated else "N/A"
             })
-            total_pending_uploads += 1
-
-    if last_updated:
-        last_updated = last_updated.strftime("%b %d, %Y")
-    else:
-        last_updated = "N/A"
+            
+            total_reconciled += reconciled
+            total_unmatched += unmatched
+            
+            if latest_job.status == "PENDING":
+                pending_uploads += 1
+            
+            if not last_updated or (updated and updated > last_updated):
+                last_updated = updated
 
     context = {
         "total_reconciled": total_reconciled,
         "total_unmatched": total_unmatched,
-        "pending_uploads": total_pending_uploads,
-        "last_updated": last_updated,
+        "pending_uploads": pending_uploads,
+        "last_updated": last_updated.strftime("%b %d, %Y") if last_updated else "N/A",
         "insurer_data": insurer_data,
     }
     return render(request, "reconciliation/dashboard.html", context)
 
+
 @login_required
 def company_select(request):
+    """
+    Show available modules/insurers for user to pick.
+    On POST, look up the corresponding Company record by module identifier (or name)
+    and redirect to upload_files with the company's id.
+    """
+    # Example modules list: (value-used-for-lookup, label-for-display)
+    # Adjust values (first element) to match Company.bank_identifier or Company.name in your DB.
     modules = [
-        ("hdfc", "Example.Hdfc"),
+        ("hdfc", "HDFC Statement"),
         ("icici", "ICICI Statement"),
-        ("oriental", "oriental"),
-        ("RSA", "RSA"),
-        ("MAGMA", "MAGMA"),
+        ("oriental", "Oriental"),
+        ("rsa", "RSA"),
+        ("magma", "MAGMA"),
     ]
 
     if request.method == "POST":
-        module = request.POST.get("module")
-        if not module:
+        selected = request.POST.get("module")
+        if not selected:
             messages.error(request, "Please select a module.")
-        else:
-            # NOTE: company selection currently picks company_id=1 - keep this logic if desired.
-            # You can change to real company id or map module->company.
-            return redirect("reconciliation:upload_files", company_id=1)
+            return render(request, "reconciliation/company_select.html", {"modules": modules})
 
-    return render(request, "reconciliation/company_select.html", {
-        "modules": modules
-    })
+        # Try to find Company by a few sensible fields
+        company = None
+        try:
+            # 1) try matching bank_identifier (recommended)
+            company = Company.objects.filter(bank_identifier__iexact=selected).first()
+        except Exception:
+            company = None
 
-# --- upload_files view (replace your existing) ---
+        if company is None:
+            # 2) try matching slug/name (some projects store 'oriental' in name)
+            company = Company.objects.filter(name__icontains=selected).first()
+
+        if company is None:
+            # 3) fallback: if user selected a numeric company id directly (rare)
+            try:
+                company = Company.objects.filter(id=int(selected)).first()
+            except Exception:
+                company = None
+
+        if company is None:
+            messages.error(request, "Could not find a matching company for the selected module. Please contact admin.")
+            return render(request, "reconciliation/company_select.html", {"modules": modules})
+
+        # Got the company — redirect to upload_files with the real id
+        return redirect("reconciliation:upload_files", company_id=company.id)
+
+    # GET: render selection
+    return render(request, "reconciliation/company_select.html", {"modules": modules})
+
+
 @login_required
 def upload_files(request, company_id):
     """
-    Upload two files (File A + File B), create a job and ReconciliationFile rows,
-    produce 5-row previews and render upload template with preview HTML.
+    Upload handler for the chosen company.
+    Shows the Upload page for the company (company passed via URL).
+    On POST, accepts file(s) and creates a ReconciliationJob + ReconciliationFile rows.
     """
     company = get_object_or_404(Company, id=company_id)
-    preview_a = None
-    preview_b = None
-    error = None
-    job = None
 
     if request.method == "POST":
-        # try both styles: multiple files 'files' or explicit 'file_a' 'file_b'
-        files_list = list(request.FILES.getlist("files") or [])
-        if not files_list:
-            a = request.FILES.get("file_a")
-            b = request.FILES.get("file_b")
-            if a:
-                files_list.append(a)
-            if b:
-                files_list.append(b)
+        # accept either two named fields or multiple "files" input
+        uploaded_files = list(request.FILES.getlist("files") or [])
+        # fallback single file fields
+        if not uploaded_files:
+            fa = request.FILES.get("file_a")
+            fb = request.FILES.get("file_b")
+            if fa:
+                uploaded_files.append(fa)
+            if fb:
+                uploaded_files.append(fb)
 
-        # If still empty, error
-        if not files_list:
-            error = "Please upload at least one file (ideally both File A and File B)."
-            return render(request, "reconciliation/upload.html", {
-                "company": company, "preview_a": preview_a, "preview_b": preview_b, "error": error
-            })
-
-        # Validate extensions of provided files
-        for f in files_list:
-            ext = _get_ext(getattr(f, "name", ""))
-            if ext not in ALLOWED_EXT:
-                error = f"File '{getattr(f,'name', '')}' has unsupported type '{ext}'. Allowed: {', '.join(sorted(ALLOWED_EXT))}"
-                return render(request, "reconciliation/upload.html", {
-                    "company": company, "preview_a": preview_a, "preview_b": preview_b, "error": error
-                })
+        if not uploaded_files:
+            messages.error(request, "Please attach at least one file (File A or File B).")
+            return render(request, "reconciliation/upload.html", {"company": company})
 
         # create job
-        job = ReconciliationJob.objects.create(user=request.user if request.user.is_authenticated else None,
-                                               company=company, status="PENDING")
-        # Save ReconciliationFile objects. We treat first as A, second as B.
-        rf_objects = []
-        for idx, uploaded in enumerate(files_list[:2]):  # only first 2 files matter for preview/mapping
+        job = ReconciliationJob.objects.create(company=company, status="PENDING", user=request.user)
+
+        # Save files: first -> A, second -> B
+        for idx, f in enumerate(uploaded_files):
             side = "A" if idx == 0 else "B"
-            rf = ReconciliationFile.objects.create(
+            ReconciliationFile.objects.create(
                 job=job,
-                file=uploaded,
+                file=f,
                 file_type=side,
-                original_name=getattr(uploaded, "name", "") or None
+                original_name=getattr(f, "name", None) or getattr(f, "filename", None)
             )
-            rf_objects.append(rf)
 
-        # get rfA / rfB
-        rfA = rf_objects[0] if len(rf_objects) >= 1 else None
-        rfB = rf_objects[1] if len(rf_objects) >= 2 else None
-
-        # Build previews (use filefield or file.path if available)
-        if rfA:
-            try:
-                # pass file-like for UploadedFile so pandas can read it directly
-                preview_a_html, err_a = _read_preview(rfA.file, ext=_get_ext(rfA.file.name), max_rows=5)
-                preview_a = preview_a_html
-                if err_a:
-                    logger.debug("Preview A error: %s", err_a)
-            except Exception as e:
-                logger.exception("Preview A exception: %s", e)
-
-            # optional: persist preview HTML if model has 'preview' JSON/text field
-            try:
-                if hasattr(rfA, "preview"):
-                    rfA.preview = {"html": preview_a} if preview_a else {}
-                    rfA.save(update_fields=["preview"])
-            except Exception:
-                pass
-
-        if rfB:
-            try:
-                preview_b_html, err_b = _read_preview(rfB.file, ext=_get_ext(rfB.file.name), max_rows=5)
-                preview_b = preview_b_html
-                if err_b:
-                    logger.debug("Preview B error: %s", err_b)
-            except Exception as e:
-                logger.exception("Preview B exception: %s", e)
-            try:
-                if hasattr(rfB, "preview"):
-                    rfB.preview = {"html": preview_b} if preview_b else {}
-                    rfB.save(update_fields=["preview"])
-            except Exception:
-                pass
-
-        # render same upload page but with previews and job info (post-redirect not required here)
-        return render(request, "reconciliation/upload.html", {
-            "company": company,
-            "job": job,
-            "preview_a": preview_a,
-            "preview_b": preview_b,
-            "error": error,
-        })
-
-    # GET
-    return render(request, "reconciliation/upload.html", {
-        "company": company,
-        "preview_a": preview_a,
-        "preview_b": preview_b,
-        "error": error,
-    })
-
-ALLOWED_EXT = ["csv", "xls", "xlsx", "xlsb"]
-
-
-def _get_ext(name):
-    return name.rsplit(".", 1)[-1].lower()
-
-
-def _read_preview(path, ext, max_rows=5):
-    """Return preview HTML table (bootstrap friendly)"""
-    try:
-        if ext in ("xls", "xlsx", "xlsb"):
-            df = pd.read_excel(path)
-        else:
-            df = pd.read_csv(path)
-
-        df = df.fillna("")
-
-        df_preview = df.head(max_rows)
-        html = df_preview.to_html(
-            classes="preview-table",
-            index=False,
-            border=0,
-            justify="center"
-        )
-        return html, None
-    except Exception as e:
-        return None, str(e)
-
-
-@login_required
-def upload_files(request, company_id):
-
-    company = get_object_or_404(Company, id=company_id)
-    preview_a = None
-    preview_b = None
-    error = None
-
-    if request.method == "POST":
-        file_a = request.FILES.get("file_a")
-        file_b = request.FILES.get("file_b")
-
-        if not file_a or not file_b:
-            return render(request, "reconciliation/upload.html", {
-                "company": company,
-                "error": "Please upload both File A and File B."
-            })
-
-        ext_a = _get_ext(file_a.name)
-        ext_b = _get_ext(file_b.name)
-
-        if ext_a not in ALLOWED_EXT or ext_b not in ALLOWED_EXT:
-            return render(request, "reconciliation/upload.html", {
-                "company": company,
-                "error": "Allowed types: CSV, XLS, XLSX"
-            })
-
-        # Create job
-        job = ReconciliationJob.objects.create(company=company, status="PENDING")
-
-        # Save files in DB
-        rf_a = ReconciliationFile.objects.create(job=job, file=file_a, file_type="A")
-        rf_b = ReconciliationFile.objects.create(job=job, file=file_b, file_type="B")
-
-        # Generate preview
-        preview_a, err_a = _read_preview(rf_a.file.path, ext_a)
-        preview_b, err_b = _read_preview(rf_b.file.path, ext_b)
-
-        # Save previews in DB
-        if preview_a:
-            rf_a.preview = {"html": preview_a}
-            rf_a.save()
-        if preview_b:
-            rf_b.preview = {"html": preview_b}
-            rf_b.save()
-
+        # redirect to preview page (use job.id)
         return redirect("reconciliation:upload_preview", job_id=job.id)
 
-    return render(request, "reconciliation/upload.html", {
-        "company": company
-    })
-
+    # GET: show upload page for this company
+    return render(request, "reconciliation/upload.html", {"company": company})
 
 @login_required
 def upload_preview(request, job_id):
-
+    """
+    Show preview of uploaded files - ONLY preview, no mapping
+    """
     job = get_object_or_404(ReconciliationJob, id=job_id)
 
-    # fetch files
+    # Fetch files
     rfA = job.files.filter(file_type="A").first()
     rfB = job.files.filter(file_type="B").first()
 
-    previewA = rfA.preview.get("html") if rfA and rfA.preview else None
-    previewB = rfB.preview.get("html") if rfB and rfB.preview else None
+    # Get previews
+    preview_a = None
+    preview_b = None
+    
+    if rfA:
+        if rfA.preview and rfA.preview.get("html"):
+            preview_a = rfA.preview.get("html")
+        else:
+            # Regenerate if missing
+            df = _read_file_to_df(rfA.file, max_rows=5)
+            if df is not None:
+                preview_a = _df_to_preview_html(df, max_rows=5)
+                rfA.preview = {"html": preview_a, "columns": list(df.columns)}
+                rfA.save()
+    
+    if rfB:
+        if rfB.preview and rfB.preview.get("html"):
+            preview_b = rfB.preview.get("html")
+        else:
+            # Regenerate if missing
+            df = _read_file_to_df(rfB.file, max_rows=5)
+            if df is not None:
+                preview_b = _df_to_preview_html(df, max_rows=5)
+                rfB.preview = {"html": preview_b, "columns": list(df.columns)}
+                rfB.save()
 
     return render(request, "reconciliation/upload_preview.html", {
+        "job": job,
         "rfA": rfA,
         "rfB": rfB,
-        "preview_a": previewA,
-        "preview_b": previewB,
-        "job": job
+        "preview_a": preview_a,
+        "preview_b": preview_b,
     })
-
-@login_required
-def mapping_view(request, job_id):
-    # Simple mapping view
-    job = get_object_or_404(ReconciliationJob, id=job_id)
-    files = list(job.files.all().order_by('uploaded_at'))
-    if len(files) < 2:
-        messages.error(request, "This job needs two uploaded files to do mapping. Please upload two files.")
-        return redirect("reconciliation:company_select")
-
-    rfA = files[0]; rfB = files[1]
-    dfA = _read_file_to_df(rfA.file); dfB = _read_file_to_df(rfB.file)
-    colsA = list(dfA.columns); colsB = list(dfB.columns)
-    standardized_fields = ["Policy Number","Endorsement Number","Gross Premium","Brokerage Amount","GST","Policy Start Date"]
-    suggestions = auto_map_columns(colsA, colsB)
-
-    if request.method == "POST":
-        # read mapping from inputs like "map__<rfA.id>__<colname>" (older mapping style)
-        mappingAtoB = {}
-        for key, val in request.POST.items():
-            if not key.startswith("map__"):
-                continue
-            parts = key.split("__", 2)
-            if len(parts) < 3:
-                continue
-            _, fileaid, raw_colA = parts
-            colA = unquote_plus(raw_colA)
-            mappingAtoB[colA] = val.strip()
-
-        # build job mapping structure
-        job_mapping = {
-            "files": {
-                str(rfA.id): {"original_filename": rfA.original_name or rfA.file.name, "mapping": {k: mappingAtoB.get(k, "") for k in colsA}},
-                str(rfB.id): {"original_filename": rfB.original_name or rfB.file.name, "mapping": {v: "" for v in colsB}}
-            },
-            "paired": {"pairs": [ {"a": a, "b": mappingAtoB.get(a, "")} for a in colsA ]}
-        }
-        job.mapping = job_mapping
-        job.status = "MAPPED"
-        job.save()
-
-        # apply mapping and run reconcile (use full files)
-        dfA_mapped = apply_mapping_to_df(_read_file_to_df(rfA.file), job_mapping["files"][str(rfA.id)]["mapping"])
-        mapping_for_B = {}
-        for a_col, b_col in mappingAtoB.items():
-            if b_col:
-                mapping_for_B[b_col] = b_col
-        dfB_mapped = apply_mapping_to_df(_read_file_to_df(rfB.file), mapping_for_B)
-
-        summary = run_reconcile_by_bank(job, dfA_mapped, dfB_mapped)
-        job.summary = summary
-        job.status = "COMPLETED"
-        job.finished_at = pd.Timestamp.now().to_pydatetime()
-        job.save()
-
-        messages.success(request, "Mapping saved and reconciliation completed.")
-        return redirect("reconciliation:dashboard")
-
-    context = {"job": job, "rfA": rfA, "rfB": rfB, "colsA": colsA, "colsB": colsB, "suggestions": suggestions, "standardized_fields": standardized_fields}
-    return render(request, "reconciliation/mapping.html", context)
 
 
 @login_required
 def mapping_advanced_view(request, job_id):
-    # Advanced mapping UI (add/remove refs, params)
+    """
+    Column mapping interface - extracted from your HTML
+    """
     job = get_object_or_404(ReconciliationJob, id=job_id)
-    files = list(job.files.all().order_by('uploaded_at'))
-    if len(files) < 2:
-        messages.error(request, "Upload two files (A and B) to proceed with mapping.")
-        return redirect("reconciliation:company_select")
-
-    rfA = files[0]; rfB = files[1]
-    dfA, errA = _read_preview(rfA.file, nrows=5)
-    dfB, errB = _read_preview(rfB.file, nrows=5)
-    colsA = list(dfA.columns) if dfA is not None else []
-    colsB = list(dfB.columns) if dfB is not None else []
-    suggestions = auto_map_columns(colsA, colsB)
-
+    
+    # Get files
+    rfA = job.files.filter(file_type="A").first()
+    rfB = job.files.filter(file_type="B").first()
+    
+    if not rfA or not rfB:
+        messages.error(request, "Both files (A and B) must be uploaded before mapping.")
+        return redirect("reconciliation:upload_files", company_id=job.company.id)
+    
+    # Read full dataframes to get ALL columns
+    dfA = _read_file_to_df(rfA.file)
+    dfB = _read_file_to_df(rfB.file)
+    
+    if dfA is None or dfB is None:
+        messages.error(request, "Error reading uploaded files. Please re-upload.")
+        return redirect("reconciliation:upload_files", company_id=job.company.id)
+    
+    colsA = list(dfA.columns)
+    colsB = list(dfB.columns)
+    
     if request.method == "POST":
-        mapping = {"files": {str(rfA.id): {"mapping": {}}, str(rfB.id): {"mapping": {}}}}
-        # collect primary field mappings
-        for fld in ["amount", "date", "description"]:
-            a_name = request.POST.get(f"map_a_{fld}", "").strip()
-            b_name = request.POST.get(f"map_b_{fld}", "").strip()
-            if a_name: mapping["files"][str(rfA.id)]["mapping"][a_name] = fld
-            if b_name: mapping["files"][str(rfB.id)]["mapping"][b_name] = fld
-
-        # collect reference fields
-        refs_a = []; refs_b = []
-        for key, val in request.POST.items():
-            if key.startswith("map_a_ref_"):
-                if val.strip(): refs_a.append(val.strip())
-            if key.startswith("map_b_ref_"):
-                if val.strip(): refs_b.append(val.strip())
-        for r in refs_a:
-            mapping["files"][str(rfA.id)]["mapping"][r] = "Reference"
-        for r in refs_b:
-            mapping["files"][str(rfB.id)]["mapping"][r] = "Reference"
-
-        # params
-        keywords = request.POST.get("keywords", "").strip()
-        enforce_b_unique = request.POST.get("enforce_b_unique") == "on"
-        use_references = request.POST.get("use_references") == "on"
-        amount_tolerance = request.POST.get("amount_tolerance", "1")
-        date_window = request.POST.get("date_window", "7")
-        fuzzy_pct = request.POST.get("fuzzy_pct", "80")
-        params = {
-            "keywords": keywords,
-            "enforce_b_unique": enforce_b_unique,
-            "use_references": use_references,
-            "amount_tolerance": float(amount_tolerance),
-            "date_window": int(date_window),
-            "fuzzy_pct": int(fuzzy_pct)
-        }
-
-        job.mapping = {"mapping_details": mapping, "params": params}
-        job.status = "MAPPED"
-        job.save()
-
-        dfA_full = _read_file_to_df(rfA.file)
-        dfB_full = _read_file_to_df(rfB.file)
-        dfA_mapped = apply_mapping_to_df(dfA_full, mapping["files"][str(rfA.id)]["mapping"])
-        dfB_mapped = apply_mapping_to_df(dfB_full, mapping["files"][str(rfB.id)]["mapping"])
-        summary = run_reconcile_by_bank(job, dfA_mapped, dfB_mapped, params)
-        job.summary = summary
-        job.status = "COMPLETED"
-        job.finished_at = pd.Timestamp.now().to_pydatetime()
-        job.save()
-
-        messages.success(request, "Mapping saved and reconciliation completed.")
-        return redirect("reconciliation:dashboard")
-
+        # Get the mapping data from hidden field
+        mapping_json = request.POST.get('mapping_data')
+        
+        if mapping_json:
+            try:
+                mapping_data = json.loads(mapping_json)
+                
+                # Save to job
+                job.mapping = mapping_data
+                job.status = "MAPPED"
+                job.save()
+                
+                messages.success(request, "Mapping saved successfully!")
+                return redirect("reconciliation:dashboard")
+                
+            except json.JSONDecodeError:
+                messages.error(request, "Invalid mapping data")
+    
+    # GET request - show form
     context = {
         "job": job,
-        "rfA": rfA, "rfB": rfB,
-        "previewA": dfA.head(5).to_dict(orient="records") if dfA is not None else None,
-        "previewB": dfB.head(5).to_dict(orient="records") if dfB is not None else None,
-        "colsA": colsA, "colsB": colsB,
-        "suggestions": suggestions,
+        "rfA": rfA,
+        "rfB": rfB,
+        "colsA": json.dumps(colsA),  # JSON for JavaScript
+        "colsB": json.dumps(colsB),  # JSON for JavaScript
     }
+    
     return render(request, "reconciliation/mapping_advanced.html", context)
 
 
-# -------------------------
-# Signup view
-# -------------------------
 def signup(request):
+    """User registration"""
     if request.method == "POST":
         form = SignUpForm(request.POST)
         if form.is_valid():
             user = form.save()
             login(request, user)
-            messages.success(request, "Account created successfully.")
+            messages.success(request, "Account created successfully!")
             return redirect("reconciliation:dashboard")
     else:
         form = SignUpForm()
+    
     return render(request, "reconciliation/signup.html", {"form": form})

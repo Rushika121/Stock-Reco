@@ -1,60 +1,285 @@
-{# reconciliation/templates/reconciliation/upload_preview.html #}
 {% extends "reconciliation/base.html" %}
 {% load static %}
 
+{% block page_css %}
+<style>
+/* Preview page styles */
+.preview-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 0;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.page-subtitle {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* Preview card */
+.preview-card {
+  background: white;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+  border: 1px solid #e5e7eb;
+}
+
+.preview-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 16px 20px;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+/* IMPORTANT: Scrollable container */
+.preview-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 400px;
+  padding: 0;
+  position: relative;
+}
+
+/* Table styles */
+.preview-table {
+  width: 100%;
+  min-width: 800px; /* Ensure horizontal scroll kicks in */
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 0;
+}
+
+.preview-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.preview-table .preview-th {
+  background: #f9fafb;
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
+  color: #374151;
+  border-right: 1px solid #e5e7eb;
+}
+
+.preview-table .preview-th:last-child {
+  border-right: none;
+}
+
+.preview-table .preview-td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-right: 1px solid #f9fafb;
+}
+
+.preview-table .preview-td:last-child {
+  border-right: none;
+}
+
+.preview-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.preview-table tbody tr:nth-child(even) {
+  background: #fafbfc;
+}
+
+.preview-info {
+  padding: 12px 20px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  font-size: 13px;
+  color: #6b7280;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Scroll hint */
+.scroll-hint {
+  padding: 8px 20px;
+  background: #eff6ff;
+  border-top: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Action buttons */
+.action-buttons {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 2px solid #e5e7eb;
+}
+
+.btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  border: none;
+  font-size: 15px;
+  transition: all 0.2s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  background: white;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+  background: #f9fafb;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .preview-scroll {
+    max-height: 300px;
+  }
+  
+  .action-buttons {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<link rel="stylesheet" href="{% static 'reconciliation/css/recon-preview.css' %}">
+<div class="preview-container">
+  
+  <div class="page-header">
+    <h1 class="page-title">Uploaded File Preview</h1>
+    <p class="page-subtitle">
+      Showing first 5 rows. Use horizontal scroll to view all columns.
+    </p>
+  </div>
 
-<div class="container" style="padding-top:28px;">
-  <h2 class="page-h1">Uploaded File Preview</h2>
-
-  <!-- FILE A -->
-  <div class="preview-card fullwidth-card" aria-label="File A preview">
-    <div class="card-header">
-      {% if rfA and rfA.original_name %}File A — {{ rfA.original_name }}{% else %}File A{% endif %}
+  <!-- FILE A PREVIEW -->
+  {% if rfA %}
+  <div class="preview-card">
+    <div class="preview-header">
+      📊 File A — {{ rfA.original_name|default:rfA.file.name }}
     </div>
-    <div class="preview-scroll-area">
+    <div class="preview-scroll">
       {% if preview_a %}
         {{ preview_a|safe }}
       {% else %}
-        <div class="p-4 text-muted">No preview available for File A.</div>
+        <div style="padding: 40px; text-align: center; color: #6b7280;">
+          No preview available for File A
+        </div>
       {% endif %}
     </div>
-  </div>
-
-  <!-- small gap -->
-  <div style="height:20px"></div>
-
-  <!-- FILE B -->
-  <div class="preview-card fullwidth-card" aria-label="File B preview">
-    <div class="card-header">
-      {% if rfB and rfB.original_name %}File B — {{ rfB.original_name }}{% else %}File B{% endif %}
+    
+    <div class="preview-info">
+      <span>Dataset: A (Primary)</span>
+      <span>Rows shown: up to 5</span>
     </div>
-    <div class="preview-scroll-area">
+  </div>
+  {% endif %}
+
+  <!-- FILE B PREVIEW -->
+  {% if rfB %}
+  <div class="preview-card">
+    <div class="preview-header">
+      📊 File B — {{ rfB.original_name|default:rfB.file.name }}
+    </div>
+    
+    <div class="preview-scroll">
       {% if preview_b %}
         {{ preview_b|safe }}
       {% else %}
-        <div class="p-4 text-muted">No preview available for File B.</div>
+        <div style="padding: 40px; text-align: center; color: #6b7280;">
+          No preview available for File B
+        </div>
       {% endif %}
     </div>
+    
+    <div class="preview-info">
+      <span>Dataset: B (Secondary)</span>
+      <span>Rows shown: up to 5</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ACTION BUTTONS -->
+  <div class="action-buttons">
+    <a href="{% url 'reconciliation:upload_files' company_id=job.company.id %}" 
+       class="btn btn-secondary">
+      ← Back to Upload
+    </a>
+    
+    <a href="{% url 'reconciliation:mapping_advanced' job_id=job.id %}" 
+       class="btn btn-primary">
+      Proceed to Mapping →
+    </a>
   </div>
 
-  <!-- actions -->
-  <div class="preview-actions">
-    <a class="btn btn-outline-secondary" href="{% url 'reconciliation:upload_files' company_id=job.company.id %}">Back</a>
-
-    {# if mapping view route is mapping_advanced, adjust if yours differs #}
-    <a class="btn proceed-btn" href="{% url 'reconciliation:mapping_advanced' job_id=job.id %}">Proceed to Mapping</a>
-  </div>
 </div>
 
-<!-- initialize bootstrap tooltips if used by preview HTML -->
 <script>
-  document.addEventListener('DOMContentLoaded', function () {
-    if (typeof bootstrap !== 'undefined') {
-      var list = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-      list.forEach(function (el) { new bootstrap.Tooltip(el); });
+// Add smooth scroll indicator
+document.addEventListener('DOMContentLoaded', function() {
+  const scrollContainers = document.querySelectorAll('.preview-scroll');
+  
+  scrollContainers.forEach(function(container) {
+    // Check if content is wider than container
+    const table = container.querySelector('.preview-table');
+    if (table && table.scrollWidth > container.clientWidth) {
+      // Content is scrollable - hint is already shown
+      container.style.cursor = 'grab';
+      
+      // Add grab cursor on scroll
+      container.addEventListener('mousedown', function() {
+        container.style.cursor = 'grabbing';
+      });
+      
+      container.addEventListener('mouseup', function() {
+        container.style.cursor = 'grab';
+      });
     }
   });
+});
 </script>
 {% endblock %}
